@@ -33,7 +33,7 @@ def mostrar_login():
 
     
 
-    st.set_page_config(page_title="login")
+    st.set_page_config(page_title="Login")
 
     st.header("SOROCARE", divider="rainbow", text_alignment="center")
 
