@@ -1,5 +1,4 @@
 import streamlit as st
-import pandas as pd
 
 def vista_datos():
         vivienda_actual = st.session_state.pagina
