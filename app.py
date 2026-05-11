@@ -1,5 +1,15 @@
-import streamlit as st
+import streamlit as st 
+from login import  mostrar_login
+from vista_general import  mostrar_dashboard
 
-st.title('🎈 App Name')
+st.set_page_config(layout="wide", page_title="SOROCARE")
 
-st.write('Hello world!')
+if 'autenticado' not in st.session_state:
+    st.session_state.autenticado = False
+
+if not st.session_state.autenticado:
+    mostrar_login()
+else: 
+    mostrar_dashboard()
+
+    
