@@ -1,37 +1,38 @@
 import streamlit as st
 
 def vista_datos():
-        vivienda_actual = st.session_state.pagina
-        coords = {
-            "Vivienda 1": "41.6444,-4.7288", 
-            "Vivienda 2": "40.4167,-3.7033", 
-            "Vivienda 3": "41.3851,2.1734"
-        }
-        punto_gps = coords.get(vivienda_actual, "41.6444,-4.7288")
+    vivienda_actual = st.session_state.pagina
+    coords = {
+        "Vivienda 1": "41.6444,-4.7288", 
+        "Vivienda 2": "40.4167,-3.7033", 
+        "Vivienda 3": "41.3851,2.1734"
+    }
+    punto_gps = coords.get(vivienda_actual, "41.6444,-4.7288")
 
-        map_url = f"https://maps.google.com/maps?q={punto_gps}&z=15&output=embed"
+    map_url = f"https://maps.google.com/maps?q={punto_gps}&z=15&output=embed"
 
-        with st.container(key="auto"):
-                col_datos, col_mapa = st.columns(2,border=True)
-                
-                with col_datos:
-                    st.markdown("<h3 style='text-align: center; color: black;'>Datos Usuario: </h3>", unsafe_allow_html=True)
-                    st.write("Nombre: ")
-                    st.write("Apellidos: ")
-                    st.write("Dirección: ")
-                    st.write("Población: ")
-                with col_mapa:
-                    st.markdown("<h3 style='text-align: center; color: black;'>Mapa</h3>", unsafe_allow_html=True)
-                    # Mapa de ejemplo
-                    
-                    st.iframe(map_url, height="content")
+    with st.container(key="auto"):
+        col_datos, col_mapa = st.columns(2,border=True)
+        
+        with col_datos:
+            st.markdown("<h3 style='text-align: center; color: black;'>Datos Usuario: </h3>", unsafe_allow_html=True)
+            st.write("Nombre: ")
+            st.write("Apellidos: ")
+            st.write("Dirección: ")
+            st.write("Población: ")
+        with col_mapa:
+            st.markdown("<h3 style='text-align: center; color: black;'>Mapa</h3>", unsafe_allow_html=True)
+            # Mapa de ejemplo
+            
+            st.iframe(map_url, height="content")
+
 def vista_mapa():
-            st.subheader("Mapa con posible iframe", text_alignment="center")
+    st.subheader("Mapa con posible iframe", text_alignment="center")
             
 
 def vista_actividad():
-        st.subheader("Registro de Actividades", text_alignment="center")
-
+    st.subheader("Registro de Actividades", text_alignment="center")
+    
         
 def mostrar_dashboard(): 
     if 'pagina' not in st.session_state: 
@@ -40,12 +41,14 @@ def mostrar_dashboard():
     st.markdown("""
         <style>
 
-          
                 
         /*----HEADER ----*/ 
-        .stApp {
-            background: linear-gradient(145deg, #43b9e8 0%, #c8d9e0 90%) !important;
-            margin-top: -6rem; 
+        header[data-testid="stHeader"] {
+            visibility: hidden;
+            height: 0%;
+        }
+        .stMainBlockContainer {
+            padding-top: 2rem !important;
         }
         .stMainBlockContainer{
             padding-top: 4rem !important; 
@@ -162,6 +165,5 @@ def mostrar_dashboard():
 
     with tab_actividad: 
         vista_actividad()
-
 
 
