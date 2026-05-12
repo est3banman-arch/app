@@ -6,8 +6,12 @@ def mostrar_login():
     <style>
 
     header[data-testid="stHeader"] {
-        visibility: hidden;
-        height: 0%;
+        opacity: 0;
+        transition: opacity .3s ease;
+    }
+    
+    header[data-testid="stHeader"]:hover {
+        opacity: 1;
     }
     .stMainBlockContainer {
         padding-top: 2rem !important;
@@ -45,7 +49,7 @@ def mostrar_login():
 
     # 1. Entrada de usuario
     nombre = st.text_input("👤 Usuario", placeholder="Usuario", key="nombre")
-
+    
     contrasenia = st.text_input("🔎︎ Contraseña", placeholder="Contraseña", type="password", key="contrasenia") 
     
     # 2. El boton del login que comprueba lo anterior 
