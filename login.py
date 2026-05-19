@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 
+st.set_page_config(page_title="Login")
 
 st.markdown("""
 <style>
@@ -38,13 +39,7 @@ input {
 </style>
 """,unsafe_allow_html=True)
 
-
-
-st.set_page_config(page_title="Login")
-
 st.header("SOROCARE", divider="rainbow", text_alignment="center")
-
-
 
 # 1. Entrada de usuario
 nombre = st.text_input("👤 Usuario", placeholder="Usuario", key="nombre")
@@ -64,15 +59,19 @@ if st.button("ACCEDER", type="secondary", use_container_width=True):
             respuesta = requests.get(url_api)
 
             if respuesta.status_code == 200: 
-                datos = respuesta.json()
+                datos = respuesta.json() 
 
                 st.success(f"Bienvenido {datos['nombre_completo']}!")
                 st.session_state.autenticado = True
                 st.session_state.usuario_nombre = datos['nombre_completo']
-                st.session_state.perfil = datos['rol']
+                st.session_state.perfil = datos.get('rol', 'Usuario')
+                st.session_state.user_id=datos['user_id']
                 st.session_state.vivienda_info = datos['vivienda']
+                id_vivienda = datos['vivienda'].get('id', '?')
+                st.session_state.pagina = f"Vivienda: {id_vivienda}"
 
-                st.switch_page("vista_general.py")
+
+                st.rerun()
             else: 
                 try:
                     mensaje_error = respuesta.json().get("detail", "Error desconocido")
@@ -85,6 +84,3 @@ if st.button("ACCEDER", type="secondary", use_container_width=True):
             st.error("No se pudo conectar con el servicio web. ¿Has encendido uvicorn?")
         except Exception as e: 
             st.error(f"Ocurrio un error inesperado: {e}")
-
-
-
