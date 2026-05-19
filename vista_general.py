@@ -5,7 +5,31 @@ import pandas as pd
 if 'pagina' not in st.session_state: 
     st.session_state.pagina = "Vivienda 1"
 
-st.set_page_config(layout="wide", page_title="Sorocare")
+
+MAPEO_CATEGORIAS = {
+    "chatGPT": "Conversación",
+    "arrastrar": "Otros",
+    "ejercicio": "Ejercicios",
+    "noticias": "Información",
+    "calendario": "Utilidades",
+    "radio": "Ocio",
+    "musica": "Ocio",
+    "goTo": "Otros",
+    "juego": "Ocio",
+    "seguir": "Otros",
+    "chiste": "Ocio",
+    "recetas": "Utilidades",
+    "voz": "Otros",
+    "curiosidad": "Información",
+    "tiempo": "Información",
+    "lista compra": "Utilidades",
+    "saludo": "Otros",
+    "fecha": "Otros",
+    "lectura": "Ocio",
+    "poesia": "Ocio",
+    "podcast": "Ocio",
+    "preguntas": "Información"
+}   
 
 def vista_datos():
     vivienda = st.session_state.get("vivienda_info",{})
@@ -37,31 +61,6 @@ def vista_datos():
 
 def vista_mapa():
     st.subheader("Mapa con posible iframe", text_alignment="center")
-            
-MAPEO_CATEGORIAS = {
-    "chatGPT": "Conversación",
-    "arrastrar": "Otros",
-    "ejercicio": "Ejercicios",
-    "noticias": "Información",
-    "calendario": "Utilidades",
-    "radio": "Ocio",
-    "musica": "Ocio",
-    "goTo": "Otros",
-    "juego": "Ocio",
-    "seguir": "Otros",
-    "chiste": "Ocio",
-    "recetas": "Utilidades",
-    "voz": "Otros",
-    "curiosidad": "Información",
-    "tiempo": "Información",
-    "lista compra": "Utilidades",
-    "saludo": "Otros",
-    "fecha": "Otros",
-    "lectura": "Ocio",
-    "poesia": "Ocio",
-    "podcast": "Ocio",
-    "preguntas": "Información"
-}   
 
 def formatear_tiempo(tiempo_delta):
     # Si el tiempo es nulo o 0, devolvemos 0 segundos
@@ -97,7 +96,7 @@ def render_ocio(df_dia):
     #---- JUEGOS ------#
     with col1: 
         st.markdown("#### Juegos")
-        df_juegos = df_dia[df_dia['tipoEvento']=='juego'].copy()
+        df_juegos = df_dia[df_dia['tipoEvento'].str.lower()=='juego'].copy()
 
         if not df_juegos.empty:
             tiempo_total = df_juegos['duracion_td'].sum()
@@ -119,7 +118,7 @@ def render_ocio(df_dia):
     #----- musica y radio -----#
     with col2: 
         st.markdown("#### Música y Radio")
-        df_audio = df_dia[df_dia['tipoEvento'].isin(['musica', 'radio', 'podcast'])].copy()
+        df_audio = df_dia[df_dia['tipoEvento'].str.lower().isin(['musica', 'radio', 'podcast'])].copy()
         
         if not df_audio.empty:
             tiempo_total = df_audio['duracion_td'].sum()
@@ -139,7 +138,7 @@ def render_ocio(df_dia):
 
     #----- lectura----#
     st.markdown("#### Lectura y Poesía")
-    df_lectura = df_dia[df_dia['tipoEvento'].isin(['lectura', 'poesia'])].copy()
+    df_lectura = df_dia[df_dia['tipoEvento'].str.lower().isin(['lectura', 'poesia'])].copy()
     if not df_lectura.empty:
         tiempo_total = df_lectura['duracion_td'].sum()
         tiempo_bonito = formatear_tiempo(tiempo_total)
@@ -202,7 +201,9 @@ def render_utilidades(df_dia, user_id):
                     titulo = evento.get('tituloTarea', '')
                     if titulo and titulo.startswith("0."):
                         titulo = titulo[2:]
-                    st.markdown(f"- 🕒 {titulo}")
+                    st.markdown(f"<p style='font-size: 23px; margin-bottom: 8px;'>&bull;  {titulo}</p>", 
+    unsafe_allow_html=True
+)
             else: 
                 st.success("No hay eventos en la agenda para este usuario. ")
         else: 
@@ -220,7 +221,7 @@ def renderizar_generico(df_dia, titulo):
 def render_ejercicio(df_dia):
     st.markdown("<h3 style='text-align: center;'>💪 Resumen de Ejercicios</h3>", unsafe_allow_html=True)
     if df_dia.empty:
-        st.info("No hay registros de ejrcicio para este dia")
+        st.info("No hay registros de ejercicio para este dia")
         return
     df_ejercicio = df_dia.copy()
     df_ejercicio['duracion_td']= pd.to_timedelta(df_ejercicio['duracion'], errors="coerce")
@@ -307,18 +308,16 @@ def render_informacion(df_dia):
     
     st.success(f"🏆 **TIEMPO TOTAL INVERTIDO EN INFORMACIÓN HOY:** {total_info_bonito}")
 
-
 def vista_actividad():
     st.subheader("Registro de Actividades", text_alignment="center")
     
-    vivienda_data = st.session_state.get("vivienda_info", {})
-    id_vivienda = vivienda_data.get("id", "No asignada")
+    user_id = st.session_state.get('user_id')
+    if not user_id:
+        user_id = 208
 
-    if not id_vivienda: 
-        st.warning("No se ha encontrado el identificador de la vivienda. ")
-        return
+    
     try: 
-        url_api = f"http://127.0.0.1:8000/vivienda/{id_vivienda}/actividad"
+        url_api = f"http://127.0.0.1:8000/usuario/{user_id}/actividad"
         respuesta = requests.get(url_api)
 
         if respuesta.status_code == 200:
@@ -326,12 +325,6 @@ def vista_actividad():
 
             if len(datos_actividad) > 0:
                 df_base = pd.DataFrame(datos_actividad)
-
-                user_id = st.session_state.get('user_id')
-                if not user_id:
-                    user_id = 208
-                
-                df_base = df_base[df_base['userId'] == user_id]
 
                 if df_base.empty:
                     st.info("No hay actividad registrada para tu usuario hoy.")
