@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+from config import API_BASE_URL
 
 st.markdown("""
 <style>
@@ -53,7 +54,12 @@ if st.button("ACCEDER", type="secondary", use_container_width=True):
         st.error("Introduce Contraseña")
     else: 
         try: 
-            url_api = f"http://127.0.0.1:8000/usuario/{nombre}"
+            datos_login = {
+                    "username": nombre,
+                    "password": contrasenia
+            }
+            
+            url_api = f"{API_BASE_URL}/usuario/{nombre}"
             respuesta = requests.get(url_api)
 
             if respuesta.status_code == 200: 
