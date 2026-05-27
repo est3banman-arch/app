@@ -14,5 +14,3 @@ else:
     pg = st.navigation([vista_general])
     
 pg.run()
-
-    
