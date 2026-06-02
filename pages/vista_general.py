@@ -1,3 +1,8 @@
+# ==============================================================================
+# 🚀 SOROCARE - Core API
+# ==============================================================================
+# Desarrollado por: Esteban Caleb Mantilla Rodriguez
+# ==============================================================================
 import streamlit as st
 import requests
 import datetime
@@ -92,14 +97,14 @@ def vista_mapa():
                 --card-shadow: 0px 4px 10px rgba(0, 0, 0, 0.5);
             }}
 
-            body {{
-                background-color: transparent;
-                color: white;
-                font-family: 'Roboto', sans-serif;
-                margin: 0;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
+            #center-wrapper {{
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        background-color: transparent;
+        color: white;
+        font-family: 'Roboto', sans-serif;
             }}
 
             .demo-badge {{ background-color: #ff9800; color: black; padding: 5px 10px; border-radius: 5px; font-weight: bold; margin-bottom: 20px;}}
@@ -278,7 +283,7 @@ def vista_mapa():
     </html>
     """
 
-    st.components.v1.html(codigo_html, height=900, scrolling=True)
+    st.iframe(codigo_html, height=900)
     
 def formatear_tiempo(tiempo_delta):
     # Si el tiempo es nulo o 0, devolvemos 0 segundos
@@ -374,7 +379,7 @@ def render_ocio(df_dia):
     total_ocio_bonito = formatear_tiempo(total_ocio)
     st.success(f"**Tiempo total de Ocio:** {total_ocio_bonito}")
 
-### editar para crear nuevos recordatorios en la agenda. 
+### Editar para crear nuevos recordatorios en la agenda. 
 @st.dialog("Nuevo Recordatorio")
 def recordatorio(user_id):
     with st.form("form_nuevo_recordatorio", clear_on_submit=True):
@@ -412,7 +417,6 @@ def recordatorio(user_id):
                 st.error("Error al guardar")
         except:
             st.error("No hay conexión con la API")
-
 
 def render_utilidades(df_dia, user_id):
     st.markdown("<h3 style='text-align: center;'>🛠️ Utilidades</h3>", unsafe_allow_html=True)
@@ -606,46 +610,72 @@ def render_conversacion(df_dia):
         st.info("No hubo conversaciones con el asistente este día.")
         return
 
+    # PREPARACIÓN DE DATOS
     df_chat['duracion_td'] = pd.to_timedelta(df_chat['duracion'], errors='coerce')
-    
-    # Extraemos solo la hora (HH:MM:SS) para que la tabla sea más fácil de leer
     df_chat['Hora'] = pd.to_datetime(df_chat['fechaRegistro']).dt.strftime('%H:%M:%S')
-    
-    def mapear_estado(val):
-        val_str = str(val)
-        if val_str in ['1', '1.0']:
-            return "Exitosa "
-        elif val_str in ['0', '0.0']:
-            return "Sin respuesta "
-        elif val_str in ['-1', '-1.0']:
-            return "Interrumpida / Error "
-        else:
-            return "Desconocido"
+    df_chat = df_chat.sort_values(by='id', ascending=True).reset_index(drop=True)
+
+    # AGRUPADOR DE CONVERSACIONES
+    conversaciones = []
+    conv_actual = []
+
+    for index, row in df_chat.iterrows():
+        conv_actual.append(row) # Metemos el mensaje actual en la "caja"
+        
+        # Si el semáforo marca fin de conversación (-1), cerramos la caja y la guardamos
+        if str(row['puntuacion']) in ['-1', '-1.0']:
+            conversaciones.append(pd.DataFrame(conv_actual))
+            conv_actual = [] # Vaciamos la caja para la siguiente conversación
             
-    df_chat['Estado'] = df_chat['puntuacion'].apply(mapear_estado)
+    # Por si la última conversación del día se quedó a medias y no le llegó el -1
+    if conv_actual:
+        conversaciones.append(pd.DataFrame(conv_actual))
 
-    # --- 2. TABLA CRONOLÓGICA ---
-    st.markdown("#### Registro de mensajes")
+    # 3. CÁLCULO DE MÉTRICAS PRINCIPALES
+    num_conversaciones = len(conversaciones)
+    tiempo_total_crudo = df_chat['duracion_td'].sum()
     
-    df_mostrar = df_chat[['Hora', 'nombre', 'Estado', 'duracion']].copy()
+    # Prevenimos el error de dividir por cero
+    if num_conversaciones > 0:
+        tiempo_medio_crudo = tiempo_total_crudo / num_conversaciones
+    else:
+        tiempo_medio_crudo = pd.Timedelta(seconds=0)
 
-    df_mostrar.columns = ['Hora', 'Mensaje del Usuario', 'Estado', 'Duración']
+    tiempo_total_bonito = formatear_tiempo(tiempo_total_crudo)
+    tiempo_medio_bonito = formatear_tiempo(tiempo_medio_crudo)
+
+    st.space()
+
+    col1, col2, col3 = st.columns(3)
     
-    st.dataframe(df_mostrar, width="stretch", hide_index=True, height=550)
+    with col1:
+        st.success(f"💬 **Total Conversaciones:**\n\n{num_conversaciones}")
+        
+    with col2:
+        st.info(f"⏱️ **Tiempo Total:**\n\n{tiempo_total_bonito}")
+        
+    with col3:
+        st.warning(f"⚖️ **Media por Conv:**\n\n{tiempo_medio_bonito}")
 
     st.divider()
+
+    ### RENDERIZADO VISUAL: LOS DESPLEGABLES (Segundo plano)
+    st.markdown("#### 📜 Registro de Mensajes (Detalle)")
     
-    # Calculamos los totales
-    num_interacciones = len(df_chat)
-    tiempo_total_crudo = df_chat['duracion_td'].sum()
-    tiempo_bonito = formatear_tiempo(tiempo_total_crudo)
-    
-    # Los mostramos en dos columnas abajo del todo para que quede simétrico
-    col_totales1, col_totales2 = st.columns(2)
-    with col_totales1:
-        st.success(f" **Número de interacciones:** {num_interacciones}")
-    with col_totales2:
-        st.info(f" **Tiempo total de conversación:** {tiempo_bonito}")
+    for i, df_conv in enumerate(conversaciones):
+        # Sacamos los datos resumen de cada bloque de conversación
+        hora_inicio = df_conv.iloc[0]['Hora']
+        mensajes_count = len(df_conv)
+        duracion_conv = formatear_tiempo(df_conv['duracion_td'].sum())
+        
+        # Título del desplegable
+        titulo_expander = f"🗣️ Conversación {i+1} | Inicio: {hora_inicio} | Duración: {duracion_conv} | Mensajes: {mensajes_count}"
+        
+        with st.expander(titulo_expander):
+            df_mostrar = df_conv[['Hora', 'nombre', 'duracion']].copy()
+            df_mostrar.columns = ['Hora', 'Mensaje del Usuario', 'Duración']
+            
+            st.dataframe(df_mostrar, width="stretch", hide_index=True)
 
 def vista_actividad():
     st.subheader("Registro de Actividades", text_alignment="center")
