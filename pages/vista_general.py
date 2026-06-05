@@ -737,9 +737,286 @@ def vista_actividad():
     except requests.exceptions.ConnectionError:
          st.error("No se pudo conectar con el servicio web (Uvicorn)")
 
-def vista_planes():
-    st.subheader("Vista Planes", text_alignment="center")
+CATALOGO_ACCIONES = {
+    "🗣️ Ir y dar un mensaje": {
+        "tipo": "BT_move_dest_speak",
+        "reqs": ["location", "speech", "volume"]
+    },
+    "🤖 Ir y conectar con ChatGPT": {
+        "tipo": "BT_ChatGPT",
+        "reqs": ["location", "speech", "volume", "user"]
+    },
+    "⏰ Despertar al usuario": {
+        "tipo": "BT_despertar",
+        "reqs": ["location", "volume"]
+    },
+    "🎮 Ejecutar actividad": {
+        "tipo": "BT_ejecutar_actividad",
+        "reqs": ["location", "activity", "other_info", "duration", "buscar", "preguntar", "base", "volume"]
+    }
+}
 
+# Funciones cacheadas y diálogos
+@st.cache_data(ttl=60)
+def obtener_planes_cacheados(id_vivienda):
+    url_lectura = f"http://localhost:5000/back_NUC/planes-programados?viviendaId={id_vivienda}"
+    try:
+        res = requests.get(url_lectura)
+        if res.status_code == 200:
+            return res.json().get("planes", [])
+        return []
+    except Exception:
+        return []
+
+@st.dialog("⚠️ Confirmar Nuevo Plan")
+def dialogo_confirmacion(payload):
+    st.write(f"Vas a programar al robot para el plan: **{payload['nombre']}**")
+    st.write("Resumen técnico de la orden:")
+    st.json(payload["accion"]) # Mostramos el JSON limpio para que confirme
+    
+    col1, col2 = st.columns(2)
+    if col1.button("❌ Cancelar", use_container_width=True):
+        st.rerun()
+        
+    if col2.button("✅ SÍ, CREAR PLAN", type="primary", use_container_width=True):
+        url_crear = "http://localhost:5000/back_NUC/planes-programados"
+        try:
+            res = requests.post(url_crear, json=payload)
+            if res.status_code == 201:
+                st.success("¡Plan creado con éxito!")
+                obtener_planes_cacheados.clear() # Quemamos el caché
+                st.rerun() # Recargamos para ver la tabla actualizada
+            else:
+                st.error(f"Error del servidor: {res.text}")
+        except Exception:
+            st.error("No se pudo conectar con el servidor local.")
+
+@st.dialog("⚠️ Confirmar Eliminación")
+def dialogo_eliminar(ids_a_borrar, nombres_a_borrar):
+    st.markdown("Vas a ocultar/eliminar los siguientes planes:")
+    for nombre in nombres_a_borrar:
+        st.markdown(f"- **{nombre}**")
+        
+    st.warning("Desaparecerán de esta lista, pero el registro se mantendrá en la base de datos de la UVa.")
+    
+    col1, col2 = st.columns(2)
+    if col1.button("❌ Cancelar", width="stretch"):
+        st.rerun()
+        
+    if col2.button("🗑️ SÍ, ELIMINAR", type="primary", width="stretch"):
+        # Aquí recorremos los IDs y le mandamos al servidor que los pase a estado "eliminado"
+        # (Ajusta la ruta PATCH o DELETE según lo que haya programado tu compañero)
+        for plan_id in ids_a_borrar:
+            url_patch = f"http://localhost:5000/back_NUC/planes-programados/{plan_id}/estado"
+            payload = {"estado": "eliminado", "actualizadoPor": "Web"}
+            requests.patch(url_patch, json=payload)
+            
+        st.success("✅ Planes eliminados con éxito")
+        obtener_planes_cacheados.clear() # Quemamos caché para que desaparezcan
+        st.rerun()
+
+# La Vista Principal para creacion de planes 
+def vista_planes():
+    st.subheader("Gestor de Planes", text_alignment="center")
+    id_vivienda = st.session_state.get("vivienda_info", {}).get("id", 167) 
+    
+    st.space("xsmall")
+    # --- SECCIÓN: VISUALIZAR TABLA INTERACTIVA ---
+    
+    # El interruptor "WhatsApp" arriba a la derecha
+    col_titulo, col_toggle = st.columns([6, 1])
+    with col_titulo:
+        st.markdown("### 📋 Planes Programados Activos")
+    with col_toggle:
+        modo_edicion = st.toggle("✏️ Editar", value=False)
+    
+    planes = obtener_planes_cacheados(id_vivienda)
+    
+    # Filtramos para no mostrar los que ya estén "eliminados" lógicamente
+    planes_visibles = [p for p in planes if p.get("estado") != "eliminado"]
+    
+    if len(planes_visibles) > 0:
+        filas_tabla = []
+        for plan in planes_visibles:
+            estado_bruto = plan.get("estado", "activo")
+            
+            # Construimos la fila base
+            fila = {
+                "ID": plan.get("idPlanProgramado"),
+                "Activo": True if estado_bruto == "activo" else False,
+                "Nombre": plan.get("nombre"),
+                "Trigger Tipo": plan.get("triggerTipo", "Desconocido"),
+                "Trigger Config": str(plan.get("triggerConfigJson", {})),
+                "Acción": f"[{plan.get('btTopic', '').split('/')[-1]}]"
+            }
+            
+            # Si el modo edición está encendido, inyectamos la columna de seleccionar
+            if modo_edicion:
+                fila["🗑️ Seleccionar"] = False
+                
+            filas_tabla.append(fila)
+            
+        df_original = pd.DataFrame(filas_tabla)
+        
+        # Configuramos las columnas dinámicamente
+        config_columnas = {
+            "ID": None, # Siempre oculto
+            "Activo": st.column_config.CheckboxColumn("¿Activo?")
+        }
+        
+        if modo_edicion:
+            config_columnas["🗑️ Seleccionar"] = st.column_config.CheckboxColumn("Seleccionar")
+            # En modo edición, bloqueamos el checkbox de 'Activo' para que no mezclen acciones
+            columnas_bloqueadas = ["Activo", "Nombre", "Trigger Tipo", "Trigger Config", "Acción"]
+        else:
+            columnas_bloqueadas = ["Nombre", "Trigger Tipo", "Trigger Config", "Acción"]
+
+        # Renderizamos el Editor
+        df_editado = st.data_editor(
+            df_original,
+            column_config=config_columnas,
+            disabled=columnas_bloqueadas,
+            hide_index=True,
+            use_container_width=True,
+            key="editor_planes"
+        )
+        
+        # --- LÓGICA DE BOTONES SEGÚN EL MODO ---
+        if modo_edicion:
+            # 1. Modo Edición Activo: Mostramos tu botón mágico
+            seleccionados = df_editado[df_editado["🗑️ Seleccionar"] == True]
+            num_sel = len(seleccionados)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # EL BOTÓN: Se desactiva si num_sel es 0 (Queda gris). Si es > 0, se pone rojo ("primary")
+            if st.button(f"🗑️ Eliminar {num_sel} planes seleccionados", type="primary", disabled=(num_sel == 0), width="stretch"):
+                ids = seleccionados["ID"].tolist()
+                nombres = seleccionados["Nombre"].tolist()
+                dialogo_eliminar(ids, nombres)
+                
+        else:
+            # 2. Modo Normal: Solo vigilamos si cambian el Activo/Deshabilitado
+            cambios = df_editado[df_editado["Activo"] != df_original["Activo"]]
+            if not cambios.empty:
+                fila_cambiada = cambios.iloc[0]
+                nuevo_estado = "activo" if fila_cambiada["Activo"] else "deshabilitado"
+                
+                url_patch = f"http://localhost:5000/back_NUC/planes-programados/{fila_cambiada['ID']}/estado"
+                requests.patch(url_patch, json={"estado": nuevo_estado, "actualizadoPor": "Web"})
+                
+                st.toast(f"✅ Plan '{fila_cambiada['Nombre']}' actualizado")
+                obtener_planes_cacheados.clear()
+                st.rerun()
+                
+    else:
+        st.info("No hay planes programados para esta vivienda.")
+    # --- SECCIÓN: CREAR PLAN (Data-Driven UI) ---
+    st.divider()
+    st.markdown("### ➕ Crear Nuevo Plan")
+
+    nombre_plan = st.text_input("📝 Nombre del Plan", placeholder="Ej: Bingo de la tarde")
+
+    col_izq, col_der = st.columns(2)
+    
+    with col_izq:
+        
+        # 1. Usamos HTML para poner el H4 y le quitamos el margen de abajo a la fuerza (-15px o lo que prefieras) 
+        st.markdown("#### ¿Qué dispara este plan?")
+        # 2. Usamos "collapsed" para que el radio no genere su propio hueco
+        tipo_trigger = st.radio(
+            label=f"", 
+            options=["⏰ A una hora concreta", "🚨 Cuando un sensor salte"],
+            label_visibility="collapsed" 
+        )
+        
+        trigger_data = {}
+        if tipo_trigger == "⏰ A una hora concreta":
+            hora_plan = st.time_input("¿A qué hora?")
+            trigger_data = {"tipo": "time", "hora": hora_plan.strftime("%H:%M:%S")}
+        else:
+            sensor_id = st.text_input("ID del Sensor", placeholder="Ej: binary_sensor.caida")
+            estado_sensor = st.selectbox("Cambio a estado:", ["on", "off"])
+            trigger_data = {"tipo": "state", "entity_id": sensor_id, "to": estado_sensor}
+            
+    with col_der:
+        st.markdown("#### La Acción (Qué hará el robot)")
+        accion_visual = st.selectbox("Selecciona la acción:", list(CATALOGO_ACCIONES.keys()))
+        
+        # Extraemos la info del diccionario
+        accion_tecnica = CATALOGO_ACCIONES[accion_visual]["tipo"]
+        reqs = CATALOGO_ACCIONES[accion_visual]["reqs"]
+        
+        # Variables inicializadas en vacío para que no den error si no se usan
+        ubicacion = mensaje = actividad = info_extra = None
+        buscar = preguntar = base = False
+        duracion = 30
+        volumen = 5
+        
+        # EL RENDERIZADO DINÁMICO DE LA INTERFAZ
+        if "location" in reqs:
+            ubicacion = st.selectbox("📍 Ubicación destino", ["mesa celia", "mesa sergio", "salon", "cocina"])
+        if "speech" in reqs:
+            mensaje = st.text_input("💬 Mensaje a decir", placeholder="Escribe el texto aquí...")
+        if "activity" in reqs:
+            actividad = st.selectbox("🎮 Tipo de Actividad", ["juegos", "estimulacion", "ejercicios"])
+        if "other_info" in reqs:
+            info_extra = st.text_input("🏷️ Tema / Extra", placeholder="Ej: banderas")
+        if "duration" in reqs:
+            duracion = st.number_input("⏱️ Duración (min)", min_value=1, value=30)
+            
+        # Agrupamos los interruptores (Toggles) si existen en los requisitos
+        if any(k in reqs for k in ["buscar", "preguntar", "base"]):
+            st.markdown("**Comportamiento Autónomo:**")
+            if "buscar" in reqs: buscar = st.toggle("Buscar al usuario")
+            if "preguntar" in reqs: preguntar = st.toggle("Preguntar al usuario antes")
+            if "base" in reqs: base = st.toggle("Volver a la base al terminar")
+            
+        if "volume" in reqs:
+            volumen = st.slider("🔊 Volumen del robot", 1, 10, 5)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # --- EL BOTÓN PARA DISPARAR EL POPUP ---
+    if st.button("Guardar Plan", type="primary", use_container_width=True):
+        if not nombre_plan:
+            st.error("⚠️ Debes ponerle un nombre al plan.")
+        elif tipo_trigger != "⏰ A una hora concreta" and not sensor_id:
+            st.error("⚠️ Debes introducir el ID del sensor.")
+        else:
+            # Construimos el payload de la Acción dinámicamente
+            accion_payload = {
+                "tipo": accion_tecnica,
+                "sender": "Administrador",
+                "receiver": "Temi_UVA2"
+            }
+            if ubicacion: accion_payload["location"] = ubicacion
+            if mensaje: accion_payload["speech"] = mensaje
+            if "volume" in reqs: accion_payload["volume"] = volumen
+            if "user" in reqs: accion_payload["user"] = "Usuario_Interactivo"
+            
+            # Si es el Jefe Final (Actividad)
+            if accion_tecnica == "BT_ejecutar_actividad":
+                accion_payload["activity"] = actividad
+                accion_payload["other_info"] = info_extra
+                accion_payload["duration"] = duracion
+                accion_payload["buscar"] = str(buscar)
+                accion_payload["preguntar_usuario"] = str(preguntar)
+                accion_payload["base_carga"] = str(base)
+
+            # Empaquetado final para el Backend
+            payload_completo = {
+                "viviendaId": id_vivienda,
+                "nombre": nombre_plan,
+                "estado": "activo",
+                "mode": "single",
+                "actualizadoPor": st.session_state.get("usuario_nombre", "Usuario1"),
+                "trigger": trigger_data,
+                "accion": accion_payload
+            }
+            
+            # Lanzamos la ventana flotante
+            dialogo_confirmacion(payload_completo)
 ### CSS 
 st.markdown("""
     <style>
@@ -866,6 +1143,9 @@ st.markdown("""
     .st-key-agregar_recordatorio button:hover {
         background-color: #e3efff !important; /* El fondo se vuelve azul */
         color: #1f80cf !important;             /* El texto se vuelve blanco */
+    }
+    [data-testid="stSliderThumbValue"]{
+        font-size: 20px; 
     }
     
     </style>
